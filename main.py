@@ -16,7 +16,7 @@ FLICKR_DIR = str(pathlib.Path.home()) + "/Flickr"
 
 class Flickd:
     """
-    In-memory representaion of Flickr library
+    In-memory representation of Flickr library
     """
 
     def __init__(self):
@@ -97,8 +97,8 @@ class Flickd:
 
 
 class FlickdEventHandler(FileSystemEventHandler):
-    def __init__(self, flickd):
-        self._flickd = flickd
+    def __init__(self, _flickd):
+        self._flickd = _flickd
 
     def on_created(self, event):
         # TODO: check whether dir or file was created
@@ -109,8 +109,8 @@ class FlickdEventHandler(FileSystemEventHandler):
         params = self._parse_filepath(event.src_path)
         self._flickd.delete_photo(params["photo"], params["photoset"])
 
-    def _parse_filepath(self, filepath):
-        parsed = filepath.split('/')
+    def _parse_filepath(self, file_path):
+        parsed = file_path.split('/')
         return {
             "photoset": parsed[-2],
             "photo": parsed[-1]

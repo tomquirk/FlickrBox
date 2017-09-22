@@ -1,5 +1,9 @@
+argh==0.26.2
 flickr-api==0.5
 httplib2==0.10.3
 oauth==1.0.1
 oauth2==1.9.0.post1
+pathtools==0.1.2
+PyYAML==3.12
 six==1.11.0
+watchdog==0.8.3
