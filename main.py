@@ -9,9 +9,10 @@ import time
 import flickr_api as flickr
 from watchdog.observers import Observer
 import watchdog.events
+import flickr_keys
 
-flickr.set_keys(api_key="30d0fda199841b928cc05ead611b3bdb",
-                api_secret="89d4e570479dc866")
+flickr.set_keys(api_key=flickr_keys.API_KEY,
+                api_secret=flickr_keys.API_SECRET)
 flickr.set_auth_handler(".auth.txt")
 flickr.enable_cache()
 
@@ -43,7 +44,7 @@ class Flickd:
 
     def sync(self):
         """
-        Syncs down from remote Flickr library
+        Syncs down from remote Flickr library, then back up
         """
         print("Syncing Flickr library...")
         local = {
@@ -118,17 +119,43 @@ class Flickd:
         photoset["photos"].remove(photo)
 
         # if the directory is empty, it is no longer considered a valid photoset
-        if len(photoset["photos"]) == 0:
-            self.delete_photoset(photoset_title)
+        if not photoset["photos"]:
+            del self._photosets[photoset_title]
 
-    def delete_photoset(self, photoset_title):
+        print("Deleted")
+
+    def edit_photo_title(self, old_photo_title, old_photoset_title, new_photo_title, new_photoset_title):
         """
-        Deletes a given photoset
+        Deletes a given photo from a given photoset
         """
-        print("Deleting %s" % photoset_title)
-        photoset = self._photosets[photoset_title]["photoset"]
-        photoset.delete()
-        del self._photosets[photoset_title]["photoset"]
+        photoset = self._photosets[old_photoset_title]
+        photo = next(p for p in photoset["photos"]
+                     if p.title == old_photo_title)
+
+        photoset["photos"].remove(photo)
+
+        photo = flickr.Photo(id=photo.id, title=new_photo_title)
+        photo.setMeta(title=new_photo_title)
+
+        if old_photoset_title != new_photoset_title:
+            photoset.removePhoto(photo)
+            if new_photo_title not in self._photosets:
+                photoset = self.add_photoset(new_photoset_title, photo)
+                photoset["photoset"].addPhoto(photo)
+
+        photoset["photos"].append(photo)
+
+        print("Edited photo name")
+
+    def edit_photoset_title(self, old_photoset_title, new_photoset_title):
+        """
+        Deletes a given photo from a given photoset
+        """
+
+        photoset = self._photosets[old_photoset_title]
+        photoset.setMeta(title=new_photoset_title)
+
+        print("Edited photoset name")
 
     @staticmethod
     def get_path(photoset_title, photo_title="", file_ext=""):
@@ -162,6 +189,14 @@ class FlickdEventHandler(watchdog.events.FileSystemEventHandler):
 
         params = self.parse_filepath(event.src_path)
         self._flickd.delete_photo(params["photo"], params["photoset"])
+
+    def on_moved(self, event):
+        old_params = self.parse_filepath(event.src_path)
+        new_params = self.parse_filepath(event.dest_path)
+
+        if isinstance(event, watchdog.events.FileMovedEvent):
+            self._flickd.edit_photo_title(
+                old_params["photo"], old_params["photoset"], new_params["photo"], new_params["photoset"])
 
     @staticmethod
     def parse_filepath(file_path):

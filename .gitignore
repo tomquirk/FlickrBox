@@ -3,5 +3,5 @@
 .venv/
 .vscode/
 __pycache__/
-
+flickr_keys.py
 #.auth.txt
