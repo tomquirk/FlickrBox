@@ -48,8 +48,7 @@ class Flickd:
         """
         print("Syncing Flickr library...")
         local = {
-            d: [os.path.splitext(f)[0]
-                for f in os.listdir(self.get_path(d))]
+            d: os.listdir(self.get_path(d))
             for d in os.listdir(FLICKR_DIR)
             if os.path.isdir(self.get_path(d))
         }
@@ -61,15 +60,38 @@ class Flickd:
                 os.makedirs(FLICKR_DIR + "/" + photoset_title)
                 local[photoset_title] = []
 
+            remote_photos = []
             for photo in photoset[1]["photos"]:
-                if photo.title not in local[photoset[0]]:
-                    # TODO: somehow get original file extension
-                    filename = self.get_path(
-                        photoset[0], photo.title, ".jpg")
+                remote_photos.append(photo.title)
+                if photo.title + ".jpg" in local[photoset[0]]:
+                    continue
 
-                    print("\tsaving: " + photo.title)
-                    photo.save(filename, size_label='Original')
-                    local[photoset_title].append(photo.title)
+                # TODO: somehow get original file extension
+                filename = self.get_path(
+                    photoset[0], photo.title, ".jpg")
+
+                print("\tsaving: " + photo.title)
+                photo.save(filename, size_label='Original')
+                local[photoset_title].append(photo.title)
+
+            for photo in local[photoset[0]]:
+                photo_parsed = os.path.splitext(photo)
+                if photo_parsed[0] in remote_photos or photo_parsed[0] == ".DS_Store":
+                    continue
+
+                self.upload_photo(
+                    photo_parsed[0], photo_parsed[1], photoset[0])
+
+        for photoset in local.items():
+            if photoset[0] in self._photosets:
+                continue
+
+            for photo in photoset[1]:
+                photo_parsed = os.path.splitext(photo)
+                if photo_parsed[0] == ".DS_Store":
+                    continue
+                self.upload_photo(
+                    photo_parsed[0], photo_parsed[1], photoset[0])
 
         print("Sync Complete!\n\nWatching ~/Flickr for changes...")
 
@@ -90,6 +112,10 @@ class Flickd:
         """
         Uploads a given photo to a given photoset. Photo is set to private for all users
         """
+
+        if photo_title == ".DS_Store":
+            return
+
         print("\tuploading photo: ", photo_title)
 
         photo_file = self.get_path(
@@ -111,6 +137,8 @@ class Flickd:
         """
         Deletes a given photo from a given photoset
         """
+        if photo_title == ".DS_Store":
+            return
         print("Deleting %s from %s" % (photo_title, photoset_title))
 
         photoset = self._photosets[photoset_title]
@@ -184,7 +212,7 @@ class FlickdEventHandler(watchdog.events.FileSystemEventHandler):
 
     def on_deleted(self, event):
         # only delete files
-        if not isinstance(event, watchdog.events.FileDeletedEvent):
+        if not isinstance(event, watchdog.events.FileDeletedEvent) or event.src_path == ".DS_Store":
             return
 
         params = self.parse_filepath(event.src_path)
