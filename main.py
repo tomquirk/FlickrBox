@@ -55,8 +55,13 @@ class Flickd:
 
         # update local to reflect remote
         for photoset in self.photosets.items():
-            if photoset[0] not in local:
-                os.makedirs(FLICKR_DIR + "/" + photoset[0])
+            photoset_title = photoset[0]
+            if photoset_title not in local:
+                os.makedirs(FLICKR_DIR + "/" + photoset_title)
+                local[photoset_title] = {
+                    "photoset": photoset[1]["photoset"],
+                    "photos": photoset[1]["photos"]
+                }
 
             for photo in photoset[1]["photos"]:
                 if photo.title not in local[photoset[0]]:
@@ -68,27 +73,40 @@ class Flickd:
 
         print("Sync Complete!\n\nWatching ~/Flickr for changes...")
 
-    def add_photoset(self, title, photos):
+    def add_photoset(self, photoset_title, photos=None):
         """
         Adds a photoset and adds photos if given
         """
-        if self.photosets[title]:
-            return None
+        if self.photosets[photoset_title]:
+            return self.photosets[photoset_title]
 
-        flickr.Photoset.create(title=title)
+        photoset = {
+            "photoset": flickr.Photoset.create(title=photoset_title),
+            "photos": []
+        }
+
         if photos is not None:
             for photo in photos:
-                self.upload_photo(photo, title)
+                self.upload_photo(photo, photoset_title)
+                photoset["photos"].append(photo)
+
+        self.photosets[photoset_title] = photoset
+        return self.photosets[photoset_title]
 
     def upload_photo(self, photo_title, photoset_title):
         """
         Uploads a given photo to a given photoset. Photo is set to private for all users
         """
         print("\tuploading photo: ", photo_title)
-        photo_obj = flickr.upload(photo_file=self.get_photo_path(
-            photo_title, photoset_title), is_public=0, is_friend=0, is_family=0, hidden=2)
 
-        self.photosets[photoset_title]["photoset"].addPhoto(photo=photo_obj)
+        photo_file = self.get_photo_path(photo_title, photoset_title)
+        photo_obj = flickr.upload(
+            photo_file=photo_file, is_public=0, is_friend=0, is_family=0, hidden=2)
+
+        photoset = self.add_photoset(photoset_title)
+
+        photoset["photoset"].addPhoto(photo=photo_obj)
+
         print("\tupload complete")
 
     def delete_photo(self, photo_title, photoset_title):
