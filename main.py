@@ -1,3 +1,7 @@
+"""
+Flickd
+"""
+
 import os
 import pathlib
 import time
@@ -38,6 +42,9 @@ class Flickd:
         self.sync()
 
     def sync(self):
+        """
+        Syncs down from remote Flickr library
+        """
         print("Syncing Flickr library...")
         local = {
             d: [os.path.splitext(f)[0]
@@ -54,7 +61,7 @@ class Flickd:
             for photo in photoset[1]["photos"]:
                 if photo.title not in local[photoset[0]]:
                     # TODO: somehow get original file extension
-                    filename = self._get_photo_path(
+                    filename = self.get_photo_path(
                         "%s.%s" % (photo.title, "jpg"), photoset[0])
                     print("\tsaving: " + photo.title)
                     photo.save(filename, size_label='Original')
@@ -68,17 +75,17 @@ class Flickd:
         if self.photosets[title]:
             return None
 
-        photoset = flickr.Photoset.create(title=title)
+        flickr.Photoset.create(title=title)
         if photos is not None:
-            for p in photos:
-                self.upload_photo(p, title)
+            for photo in photos:
+                self.upload_photo(photo, title)
 
     def upload_photo(self, photo_title, photoset_title):
         """
         Uploads a given photo to a given photoset. Photo is set to private for all users
         """
         print("\tuploading photo: ", photo_title)
-        photo_obj = flickr.upload(photo_file=self._get_photo_path(
+        photo_obj = flickr.upload(photo_file=self.get_photo_path(
             photo_title, photoset_title), is_public=0, is_friend=0, is_family=0, hidden=2)
 
         self.photosets[photoset_title]["photoset"].addPhoto(photo=photo_obj)
@@ -92,24 +99,36 @@ class Flickd:
             p for p in self.photosets[photoset_title]["photos"] if p.title == photo_title)
         photo.delete()
 
-    def _get_photo_path(self, photo_title, photoset_title):
+    @staticmethod
+    def get_photo_path(photo_title, photoset_title):
+        """
+        Returns the full path of a given photo within a given photoset
+        """
         return "%s/%s/%s" % (FLICKR_DIR, photoset_title, photo_title)
 
 
 class FlickdEventHandler(FileSystemEventHandler):
+    """
+    Watchdog event handler for relevant Flickd events
+    """
+
     def __init__(self, _flickd):
         self._flickd = _flickd
 
     def on_created(self, event):
         # TODO: check whether dir or file was created
-        params = self._parse_filepath(event.src_path)
+        params = self.parse_filepath(event.src_path)
         self._flickd.upload_photo(params["photo"], params["photoset"])
 
     def on_deleted(self, event):
-        params = self._parse_filepath(event.src_path)
+        params = self.parse_filepath(event.src_path)
         self._flickd.delete_photo(params["photo"], params["photoset"])
 
-    def _parse_filepath(self, file_path):
+    @staticmethod
+    def parse_filepath(file_path):
+        """
+        Returns a dictionary containing the photoset title and photo title of a given filepath
+        """
         parsed = file_path.split('/')
         return {
             "photoset": parsed[-2],
@@ -118,14 +137,14 @@ class FlickdEventHandler(FileSystemEventHandler):
 
 
 if __name__ == "__main__":
-    flickd = Flickd()
+    FLICKD = Flickd()
 
-    observer = Observer()
-    observer.schedule(FlickdEventHandler(flickd), FLICKR_DIR, recursive=True)
-    observer.start()
+    OBSERVER = Observer()
+    OBSERVER.schedule(FlickdEventHandler(FLICKD), FLICKR_DIR, recursive=True)
+    OBSERVER.start()
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+        OBSERVER.stop()
+    OBSERVER.join()
