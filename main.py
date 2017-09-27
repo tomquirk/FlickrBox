@@ -91,7 +91,7 @@ class Flickrbox:
                 self.upload_photo(
                     photo_parsed[0], photo_parsed[1], photoset[0])
 
-        print("Sync Complete!\n\nWatching ~/Flickr for changes...")
+        print("Sync Complete!\n\nWatching ~/%s for changes..." % FLICKRBOX)
 
     def add_photoset(self, photoset_title, primary_photo):
         """
@@ -119,7 +119,7 @@ class Flickrbox:
         photo_file = self.get_path(
             photoset_title, photo_title, file_extension)
         photo_obj = flickr.upload(
-            photo_file=photo_file, is_public=0, is_friend=0, is_family=0, hidden=2)
+            photo_file=photo_file, is_public="0", is_friend="0", is_family="0", hidden="2")
 
         if photoset_title not in self._photosets:
             self.add_photoset(photoset_title, photo_obj)
@@ -200,10 +200,12 @@ class FlickrboxEventHandler(watchdog.events.FileSystemEventHandler):
         self._flickrbox = _flickrbox
 
     def on_created(self, event):
-        # TODO: check whether dir or file was created
+        if not isinstance(event, watchdog.events.FileCreatedEvent):
+            return
+
         params = self.parse_filepath(event.src_path)
         # ignore any photos that aren't in a sub-directory
-        if params["photoset"] == "Flickr":
+        if params["photoset"] == FLICKRBOX:
             return
         self._flickrbox.upload_photo(
             params["photo"], params["ext"], params["photoset"])
