@@ -5,6 +5,7 @@ FlickrBox
 import os
 from pathlib import Path
 import time
+import logging
 
 import flickr_api as flickr
 from watchdog.observers import Observer
@@ -12,6 +13,8 @@ import watchdog.events
 
 flickr.set_auth_handler(".auth")
 flickr.enable_cache()
+
+logging.basicConfig(format='- %(message)s', level=logging.DEBUG)
 
 FLICKRBOX = "FlickrBox"
 FLICKRBOX_PATH = "%s/%s" % (Path.home(), FLICKRBOX)
@@ -23,13 +26,13 @@ class Flickrbox:
     """
 
     def __init__(self):
-        print("Logging in...")
+        logging.info("Logging in...")
         self._user = flickr.test.login()
         if not os.path.exists(FLICKRBOX_PATH):
             os.makedirs(FLICKRBOX_PATH)
 
         # The source-of-truth for photosets. Reflects remote state
-        print("Fetching data from Flickr...")
+        logging.info("Fetching data from Flickr...")
         self._photosets = {
             p.title: {
                 "photoset": p,
@@ -44,7 +47,7 @@ class Flickrbox:
         """
         Syncs down from remote Flickr library, then back up
         """
-        print("Syncing Flickr library...")
+        logging.info("Syncing Flickr library...")
         local = {
             d: os.listdir(self.get_path(d))
             for d in os.listdir(FLICKRBOX_PATH)
@@ -68,7 +71,7 @@ class Flickrbox:
                 filename = self.get_path(
                     photoset[0], photo.title, ".jpg")
 
-                print("\tsaving: " + photo.title)
+                logging.info("\tsaving: " + photo.title)
                 photo.save(filename, size_label='Original')
                 local[photoset_title].append(photo.title)
 
@@ -91,7 +94,8 @@ class Flickrbox:
                 self.upload_photo(
                     photo_parsed[0], photo_parsed[1], photoset[0])
 
-        print("Sync Complete!\n\nWatching ~/%s for changes..." % FLICKRBOX)
+        logging.info(
+            "Sync Complete!\n\nWatching ~/%s for changes..." % FLICKRBOX)
 
     def add_photoset(self, photoset_title, primary_photo):
         """
@@ -114,7 +118,7 @@ class Flickrbox:
         if photo_title == ".DS_Store":
             return
 
-        print("\tuploading photo: ", photo_title)
+        logging.info("\tuploading photo: ", photo_title)
 
         photo_file = self.get_path(
             photoset_title, photo_title, file_extension)
@@ -129,7 +133,7 @@ class Flickrbox:
 
         self._photosets[photoset_title]["photos"].append(photo_obj)
 
-        print("\tupload complete")
+        logging.info("\tupload complete")
 
     def delete_photo(self, photo_title, photoset_title):
         """
@@ -137,7 +141,8 @@ class Flickrbox:
         """
         if photo_title == ".DS_Store":
             return
-        print("Deleting %s from %s" % (photo_title, photoset_title))
+
+        logging.info("Deleting %s from %s" % (photo_title, photoset_title))
 
         photoset = self._photosets[photoset_title]
         photo = next(p for p in photoset["photos"] if p.title == photo_title)
@@ -148,7 +153,7 @@ class Flickrbox:
         if not photoset["photos"]:
             del self._photosets[photoset_title]
 
-        print("Deleted")
+        logging.info("Deleted")
 
     def edit_photo_title(self, old_photo_title, old_photoset_title, new_photo_title, new_photoset_title):
         """
@@ -171,7 +176,7 @@ class Flickrbox:
 
         photoset["photos"].append(photo)
 
-        print("Edited photo name")
+        logging.info("Edited photo name")
 
     def edit_photoset_title(self, old_photoset_title, new_photoset_title):
         """
@@ -181,7 +186,7 @@ class Flickrbox:
         photoset = self._photosets[old_photoset_title]
         photoset.setMeta(title=new_photoset_title)
 
-        print("Edited photoset name")
+        logging.info("Edited photoset name")
 
     @staticmethod
     def get_path(photoset_title, photo_title="", file_ext=""):
