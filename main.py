@@ -1,25 +1,23 @@
 """
-Flickd
+FlickrBox
 """
 
 import os
-import pathlib
+from pathlib import Path
 import time
 
 import flickr_api as flickr
 from watchdog.observers import Observer
 import watchdog.events
-import flickr_keys
 
-flickr.set_keys(api_key=flickr_keys.API_KEY,
-                api_secret=flickr_keys.API_SECRET)
-flickr.set_auth_handler(".auth.txt")
+flickr.set_auth_handler(".auth")
 flickr.enable_cache()
 
-FLICKR_DIR = str(pathlib.Path.home()) + "/Flickr"
+FLICKRBOX = "FlickrBox"
+FLICKRBOX_PATH = "%s/%s" % (Path.home(), FLICKRBOX)
 
 
-class Flickd:
+class Flickrbox:
     """
     In-memory representation of Flickr library
     """
@@ -27,8 +25,8 @@ class Flickd:
     def __init__(self):
         print("Logging in...")
         self._user = flickr.test.login()
-        if not os.path.exists(FLICKR_DIR):
-            os.makedirs(FLICKR_DIR)
+        if not os.path.exists(FLICKRBOX_PATH):
+            os.makedirs(FLICKRBOX_PATH)
 
         # The source-of-truth for photosets. Reflects remote state
         print("Fetching data from Flickr...")
@@ -49,7 +47,7 @@ class Flickd:
         print("Syncing Flickr library...")
         local = {
             d: os.listdir(self.get_path(d))
-            for d in os.listdir(FLICKR_DIR)
+            for d in os.listdir(FLICKRBOX_PATH)
             if os.path.isdir(self.get_path(d))
         }
 
@@ -57,7 +55,7 @@ class Flickd:
         for photoset in self._photosets.items():
             photoset_title = photoset[0]
             if photoset_title not in local:
-                os.makedirs(FLICKR_DIR + "/" + photoset_title)
+                os.makedirs(FLICKRBOX_PATH + "/" + photoset_title)
                 local[photoset_title] = []
 
             remote_photos = []
@@ -190,16 +188,16 @@ class Flickd:
         """
         Returns the absolute path based on given arguments
         """
-        return "%s/%s/%s%s" % (FLICKR_DIR, photoset_title, photo_title, file_ext)
+        return "%s/%s/%s%s" % (FLICKRBOX_PATH, photoset_title, photo_title, file_ext)
 
 
-class FlickdEventHandler(watchdog.events.FileSystemEventHandler):
+class FlickrboxEventHandler(watchdog.events.FileSystemEventHandler):
     """
-    Watchdog event handler for relevant Flickd events
+    Watchdog event handler for relevant Flickrbox events
     """
 
-    def __init__(self, _flickd):
-        self._flickd = _flickd
+    def __init__(self, _flickrbox):
+        self._flickrbox = _flickrbox
 
     def on_created(self, event):
         # TODO: check whether dir or file was created
@@ -207,7 +205,7 @@ class FlickdEventHandler(watchdog.events.FileSystemEventHandler):
         # ignore any photos that aren't in a sub-directory
         if params["photoset"] == "Flickr":
             return
-        self._flickd.upload_photo(
+        self._flickrbox.upload_photo(
             params["photo"], params["ext"], params["photoset"])
 
     def on_deleted(self, event):
@@ -216,14 +214,14 @@ class FlickdEventHandler(watchdog.events.FileSystemEventHandler):
             return
 
         params = self.parse_filepath(event.src_path)
-        self._flickd.delete_photo(params["photo"], params["photoset"])
+        self._flickrbox.delete_photo(params["photo"], params["photoset"])
 
     def on_moved(self, event):
         old_params = self.parse_filepath(event.src_path)
         new_params = self.parse_filepath(event.dest_path)
 
         if isinstance(event, watchdog.events.FileMovedEvent):
-            self._flickd.edit_photo_title(
+            self._flickrbox.edit_photo_title(
                 old_params["photo"], old_params["photoset"], new_params["photo"], new_params["photoset"])
 
     @staticmethod
@@ -241,10 +239,11 @@ class FlickdEventHandler(watchdog.events.FileSystemEventHandler):
 
 
 if __name__ == "__main__":
-    FLICKD = Flickd()
+    FLICKRBOX = Flickrbox()
 
     OBSERVER = Observer()
-    OBSERVER.schedule(FlickdEventHandler(FLICKD), FLICKR_DIR, recursive=True)
+    OBSERVER.schedule(FlickrboxEventHandler(FLICKRBOX),
+                      FLICKRBOX_PATH, recursive=True)
     OBSERVER.start()
     try:
         while True:

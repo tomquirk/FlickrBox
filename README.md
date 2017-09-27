@@ -1,15 +1,17 @@
-# Flickd
+# FlickrBox
 
 The Supreme Flickr Backup Tool.
 
-## Why?
+## Why
 
 Dropbox, Google Drive, OneDrive. All awesome backup tools, but expensive if you need to back up your photos.
 Flickr provides 1TB of storage FOR FREE - perfect! But, there is no tool for Flickr backups as good as the aforementioned.
 
 > I want to add, rename and remove photos within a single folder and sync it with my Flickr library, just like Dropbox
 
-**Flickd** is the solution! **Flickd** uses a single directory, `~/Flickd`, and syncs with your Flickr library. Any time you add, remove or update a photo, you change will be instantly reflected on your Flickr account!
+**FlickrBox** is the solution! **FlickrBox** uses a single directory, `~/FlickrBox`, and syncs with your Flickr library. Any time you add, remove or update a photo, you change will be instantly reflected on your Flickr account!
+
+**A Dropbox-like experience for your free 1TB Flickr Library!**
 
 ## Getting Started
 
