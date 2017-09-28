@@ -6,3 +6,4 @@ venv
 __pycache__/
 flickr_keys.py
 .auth
+.DS_Store

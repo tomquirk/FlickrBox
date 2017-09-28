@@ -16,20 +16,20 @@ flickr.enable_cache()
 
 logging.basicConfig(format='- %(message)s', level=logging.DEBUG)
 
-FLICKRBOX = "FlickrBox"
-FLICKRBOX_PATH = "%s/%s" % (Path.home(), FLICKRBOX)
-
 
 class Flickrbox:
     """
     In-memory representation of Flickr library
     """
 
-    def __init__(self):
+    def __init__(self, dirname="FlickrBox", path=Path.home(), sync=False):
+        self.dirname = dirname
+        self.path = "%s/%s" % (path, dirname)
+
+        if not os.path.exists(self.path):
+            os.makedirs(self.path)
         logging.info("Logging in...")
         self._user = flickr.test.login()
-        if not os.path.exists(FLICKRBOX_PATH):
-            os.makedirs(FLICKRBOX_PATH)
 
         # The source-of-truth for photosets. Reflects remote state
         logging.info("Fetching data from Flickr...")
@@ -41,7 +41,8 @@ class Flickrbox:
             for p in self._user.getPhotosets()
         }
 
-        self.sync()
+        if sync:
+            self.sync()
 
     def sync(self):
         """
@@ -50,7 +51,7 @@ class Flickrbox:
         logging.info("Syncing Flickr library...")
         local = {
             d: os.listdir(self.get_path(d))
-            for d in os.listdir(FLICKRBOX_PATH)
+            for d in os.listdir(self.path)
             if os.path.isdir(self.get_path(d))
         }
 
@@ -58,7 +59,7 @@ class Flickrbox:
         for photoset in self._photosets.items():
             photoset_title = photoset[0]
             if photoset_title not in local:
-                os.makedirs(FLICKRBOX_PATH + "/" + photoset_title)
+                os.makedirs(self.get_path(photoset_title))
                 local[photoset_title] = []
 
             remote_photos = []
@@ -95,7 +96,7 @@ class Flickrbox:
                     photo_parsed[0], photo_parsed[1], photoset[0])
 
         logging.info(
-            "Sync Complete!\n\nWatching ~/%s for changes..." % FLICKRBOX)
+            "Sync Complete!\n\nWatching %s for changes..." % self.path)
 
     def add_photoset(self, photoset_title, primary_photo):
         """
@@ -118,7 +119,7 @@ class Flickrbox:
         if photo_title == ".DS_Store":
             return
 
-        logging.info("\tuploading photo: ", photo_title)
+        logging.info("\tuploading photo: %s" % photo_title)
 
         photo_file = self.get_path(
             photoset_title, photo_title, file_extension)
@@ -155,7 +156,8 @@ class Flickrbox:
 
         logging.info("Deleted")
 
-    def edit_photo_title(self, old_photo_title, old_photoset_title, new_photo_title, new_photoset_title):
+    def edit_photo_title(self, old_photo_title, old_photoset_title, new_photo_title,
+                         new_photoset_title):
         """
         Deletes a given photo from a given photoset
         """
@@ -188,12 +190,11 @@ class Flickrbox:
 
         logging.info("Edited photoset name")
 
-    @staticmethod
-    def get_path(photoset_title, photo_title="", file_ext=""):
+    def get_path(self, photoset_title, photo_title="", file_ext=""):
         """
         Returns the absolute path based on given arguments
         """
-        return "%s/%s/%s%s" % (FLICKRBOX_PATH, photoset_title, photo_title, file_ext)
+        return "%s/%s/%s%s" % (self.path, photoset_title, photo_title, file_ext)
 
 
 class FlickrboxEventHandler(watchdog.events.FileSystemEventHandler):
@@ -229,7 +230,8 @@ class FlickrboxEventHandler(watchdog.events.FileSystemEventHandler):
 
         if isinstance(event, watchdog.events.FileMovedEvent):
             self._flickrbox.edit_photo_title(
-                old_params["photo"], old_params["photoset"], new_params["photo"], new_params["photoset"])
+                old_params["photo"], old_params["photoset"],
+                new_params["photo"], new_params["photoset"])
 
     @staticmethod
     def parse_filepath(file_path):
@@ -246,11 +248,11 @@ class FlickrboxEventHandler(watchdog.events.FileSystemEventHandler):
 
 
 if __name__ == "__main__":
-    FLICKRBOX = Flickrbox()
+    FLICKRBOX = Flickrbox(sync=True)
 
     OBSERVER = Observer()
     OBSERVER.schedule(FlickrboxEventHandler(FLICKRBOX),
-                      FLICKRBOX_PATH, recursive=True)
+                      FLICKRBOX.path, recursive=True)
     OBSERVER.start()
     try:
         while True:
