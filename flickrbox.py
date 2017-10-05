@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import time
 import logging
+import _thread
 
 import flickr_api as flickr
 from watchdog.observers import Observer
@@ -21,15 +22,30 @@ class Flickrbox:
     """
     In-memory representation of Flickr library
     """
+    valid_extensions = [".jpg", ".png"]
 
     def __init__(self, dirname="FlickrBox", path=Path.home(), sync=False):
         self.dirname = dirname
         self.path = "%s/%s" % (path, dirname)
 
+        self._upload_tickets = {}
+        self._user = None
+        self._photosets = None
+        self._syncing = True
+
+        self.sync(sync)
+
+    def sync(self, sync):
+        """
+        Syncs down from remote Flickr library, then back up
+        """
         if not os.path.exists(self.path):
             os.makedirs(self.path)
         logging.info("Logging in...")
         self._user = flickr.test.login()
+
+        if not sync:
+            return
 
         # The source-of-truth for photosets. Reflects remote state
         logging.info("Fetching data from Flickr...")
@@ -41,19 +57,14 @@ class Flickrbox:
             for p in self._user.getPhotosets()
         }
 
-        if sync:
-            self.sync()
-
-    def sync(self):
-        """
-        Syncs down from remote Flickr library, then back up
-        """
         logging.info("Syncing Flickr library...")
         local = {
             d: os.listdir(self.get_path(d))
             for d in os.listdir(self.path)
             if os.path.isdir(self.get_path(d))
         }
+
+        _thread.start_new_thread(self.poll_upload_tickets, ())
 
         # update local to reflect remote
         for photoset in self._photosets.items():
@@ -95,6 +106,8 @@ class Flickrbox:
                 self.upload_photo(
                     photo_parsed[0], photo_parsed[1], photoset[0])
 
+        self._syncing = False
+
         logging.info(
             "Sync Complete!\n\nWatching %s for changes..." % self.path)
 
@@ -111,30 +124,59 @@ class Flickrbox:
         self._photosets[photoset_title] = photoset
         return self._photosets[photoset_title]
 
+    def poll_upload_tickets(self):
+        """
+        Checks the upload status of all uploading tickets.
+        Once complete, adds the photo to it's repsective photoset
+        """
+        while self._syncing:
+            tickets = flickr.Photo.checkUploadTickets(
+                self._upload_tickets.keys())
+
+            for ticket in tickets:
+                if ticket["complete"] == 1:
+                    photo = flickr.Photo(id=ticket["photoid"])
+
+                    self.add_to_photoset(
+                        photo, self._upload_tickets[ticket["id"]])
+
+                    del self._upload_tickets[ticket["id"]]
+
+            time.sleep(1)
+
+    def add_to_photoset(self, photo_obj, photoset_title):
+        """
+        Adds a given photo to a given photoset
+        """
+        try:
+            if photoset_title not in self._photosets:
+                self.add_photoset(photoset_title, photo_obj)
+            else:
+                self._photosets[photoset_title]["photoset"].addPhoto(
+                    photo=photo_obj)
+
+            self._photosets[photoset_title]["photos"].append(photo_obj)
+
+        except Exception as e:
+            print("error adding to photoset")
+
     def upload_photo(self, photo_title, file_extension, photoset_title):
         """
         Uploads a given photo to a given photoset. Photo is set to private for all users
         """
 
-        if photo_title == ".DS_Store":
+        if photo_title == ".DS_Store" or file_extension.lower() not in self.valid_extensions:
             return
-
-        logging.info("\tuploading photo: %s" % photo_title)
 
         photo_file = self.get_path(
             photoset_title, photo_title, file_extension)
-        photo_obj = flickr.upload(
-            photo_file=photo_file, is_public="0", is_friend="0", is_family="0", hidden="2")
+        upload_ticket = flickr.upload(
+            photo_file=photo_file,
+            is_public="0", is_friend="0", is_family="0", hidden="2", async="1")
 
-        if photoset_title not in self._photosets:
-            self.add_photoset(photoset_title, photo_obj)
-        else:
-            self._photosets[photoset_title]["photoset"].addPhoto(
-                photo=photo_obj)
+        self._upload_tickets[upload_ticket["id"]] = photoset_title
 
-        self._photosets[photoset_title]["photos"].append(photo_obj)
-
-        logging.info("\tupload complete")
+        logging.info("\tuploading photo: %s" % photo_title)
 
     def delete_photo(self, photo_title, photoset_title):
         """
