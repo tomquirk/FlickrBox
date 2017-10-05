@@ -22,7 +22,8 @@ class Flickrbox:
     """
     In-memory representation of Flickr library
     """
-    valid_extensions = [".jpg", ".png"]
+    # https://help.yahoo.com/kb/flickr/photo-file-formats-sln8771.html
+    valid_extensions = [".jpg", ".jpeg", ".png", ".gif"]
 
     def __init__(self, dirname="FlickrBox", path=Path.home(), sync=False):
         self.dirname = dirname
