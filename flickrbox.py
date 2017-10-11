@@ -9,6 +9,7 @@ import logging
 import _thread
 
 import flickr_api as flickr
+from tqdm import tqdm
 from watchdog.observers import Observer
 import watchdog.events
 
@@ -33,20 +34,21 @@ class Flickrbox:
         self._user = None
         self._photosets = None
         self._syncing = True
+        self._sync_pbar = None
 
-        self.sync(sync)
+        self.setup()
+        if sync:
+            self.sync()
 
-    def sync(self, sync):
+    def setup(self):
         """
-        Syncs down from remote Flickr library, then back up
+        Setup tasks for FlickrBox. Logs in user, creates source directory, etc.
         """
         if not os.path.exists(self.path):
             os.makedirs(self.path)
+
         logging.info("Logging in...")
         self._user = flickr.test.login()
-
-        if not sync:
-            return
 
         # The source-of-truth for photosets. Reflects remote state
         logging.info("Fetching data from Flickr...")
@@ -58,59 +60,89 @@ class Flickrbox:
             for p in self._user.getPhotosets()
         }
 
+    def sync(self):
+        """
+        Syncs down from remote Flickr library, then back up
+        """
         logging.info("Syncing Flickr library...")
-        local = {
-            d: os.listdir(self.get_path(d))
+        local_state = {
+            d: os.listdir(self._get_path(d))
             for d in os.listdir(self.path)
-            if os.path.isdir(self.get_path(d))
+            if os.path.isdir(self._get_path(d))
         }
 
-        _thread.start_new_thread(self.poll_upload_tickets, ())
+        self._sync_down(local_state)
+
+        self._syncing = False
+
+    def _sync_down(self, local_state):
+
+        remote_photos = []  # running list of all remote photos
+        download_queue = []
+        upload_queue = []
 
         # update local to reflect remote
         for photoset in self._photosets.items():
             photoset_title = photoset[0]
-            if photoset_title not in local:
-                os.makedirs(self.get_path(photoset_title))
-                local[photoset_title] = []
+            if photoset_title not in local_state:
+                os.makedirs(self._get_path(photoset_title))
+                local_state[photoset_title] = []
 
-            remote_photos = []
             for photo in photoset[1]["photos"]:
                 remote_photos.append(photo.title)
-                if photo.title + ".jpg" in local[photoset[0]]:
+                if photo.title in [os.path.splitext(p)[0] for p in local_state[photoset_title]]:
                     continue
 
-                # TODO: somehow get original file extension
-                filename = self.get_path(
-                    photoset[0], photo.title, ".jpg")
+                download_queue.append({
+                    "photo": photo,
+                    "photoset_title": photoset_title
+                })
 
-                logging.info("\tsaving: " + photo.title)
-                photo.save(filename, size_label='Original')
-                local[photoset_title].append(photo.title)
-
-            for photo in local[photoset[0]]:
+            for photo in local_state[photoset_title]:
                 photo_parsed = os.path.splitext(photo)
                 if photo_parsed[0] in remote_photos or photo_parsed[0] == ".DS_Store":
                     continue
 
-                self.upload_photo(
-                    photo_parsed[0], photo_parsed[1], photoset[0])
+                upload_queue.append({
+                    "filename": photo_parsed[0],
+                    "ext": photo_parsed[1],
+                    "photoset_title": photoset_title
+                })
 
-        for photoset in local.items():
-            if photoset[0] in self._photosets:
+        for photoset in local_state.items():
+            photoset_title = photoset[0]
+            if photoset_title in self._photosets:
                 continue
 
             for photo in photoset[1]:
                 photo_parsed = os.path.splitext(photo)
                 if photo_parsed[0] == ".DS_Store":
                     continue
-                self.upload_photo(
-                    photo_parsed[0], photo_parsed[1], photoset[0])
 
-        self._syncing = False
+                upload_queue.append({
+                    "filename": photo_parsed[0],
+                    "ext": photo_parsed[1],
+                    "photoset_title": photoset_title
+                })
 
-        logging.info(
-            "Sync Complete!\n\nWatching %s for changes..." % self.path)
+        self._sync_pbar = tqdm(total=len(download_queue) + len(upload_queue))
+
+        if download_queue:
+            for photo in tqdm(download_queue):
+                photo_title = photo["photo"].title
+                photoset_title = photo["photoset_title"]
+
+                filename = self._get_path(photoset_title, photo_title)
+                photo.save(filename)
+                local_state[photoset_title].append(photo_title)
+
+                self._sync_pbar.update(1)
+
+        if upload_queue:
+            for photo in upload_queue:
+                self.upload_photo(photo["filename"],
+                                  photo["ext"], photo["photoset_title"])
+            _thread.start_new_thread(self.poll_upload_tickets, ())
 
     def add_photoset(self, photoset_title, primary_photo):
         """
@@ -130,7 +162,7 @@ class Flickrbox:
         Checks the upload status of all uploading tickets.
         Once complete, adds the photo to it's repsective photoset
         """
-        while self._syncing:
+        while self._upload_tickets or self._syncing:
             tickets = flickr.Photo.checkUploadTickets(
                 self._upload_tickets.keys())
 
@@ -142,8 +174,12 @@ class Flickrbox:
                         photo, self._upload_tickets[ticket["id"]])
 
                     del self._upload_tickets[ticket["id"]]
+                    self._sync_pbar.update(1)
 
             time.sleep(1)
+
+        logging.info(
+            "Sync Complete!\n\nWatching %s for changes..." % self.path)
 
     def add_to_photoset(self, photo_obj, photoset_title):
         """
@@ -165,11 +201,10 @@ class Flickrbox:
         """
         Uploads a given photo to a given photoset. Photo is set to private for all users
         """
-
         if photo_title == ".DS_Store" or file_extension.lower() not in self.valid_extensions:
             return
 
-        photo_file = self.get_path(
+        photo_file = self._get_path(
             photoset_title, photo_title, file_extension)
         upload_ticket = flickr.upload(
             photo_file=photo_file,
@@ -177,7 +212,7 @@ class Flickrbox:
 
         self._upload_tickets[upload_ticket["id"]] = photoset_title
 
-        logging.info("\tuploading photo: %s" % photo_title)
+        # logging.info("\tuploading photo: %s" % photo_title)
 
     def delete_photo(self, photo_title, photoset_title):
         """
@@ -233,7 +268,7 @@ class Flickrbox:
 
         logging.info("Edited photoset name")
 
-    def get_path(self, photoset_title, photo_title="", file_ext=""):
+    def _get_path(self, photoset_title, photo_title="", file_ext=""):
         """
         Returns the absolute path based on given arguments
         """
