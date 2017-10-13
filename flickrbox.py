@@ -12,7 +12,6 @@ import flickr_api as flickr
 from watchdog.observers import Observer
 import watchdog.events
 
-flickr.set_auth_handler(".auth")
 flickr.enable_cache()
 
 logging.basicConfig(format='- %(message)s', level=logging.DEBUG)
@@ -34,17 +33,41 @@ class Flickrbox:
         self._photosets = None
         self._syncing = True
 
+        self.setup()
         self.sync(sync)
 
-    def sync(self, sync):
+    @staticmethod
+    def auth():
         """
-        Syncs down from remote Flickr library, then back up
+        Authorises a user with the app. Exectutes steps and prompts user for auth details
         """
+        if os.path.exists('./.auth'):
+            flickr.set_auth_handler(".auth")
+            return
+
+        a = flickr.auth.AuthHandler()
+        perms = "delete"
+        url = a.get_authorization_url(perms)
+        print("Open this in a web browser -> ", url)
+        oauth_verifier = input("Copy the oauth_verifier tag > ")
+        a.set_verifier(oauth_verifier)
+        flickr.set_auth_handler(a)
+        a.save('.auth')
+
+    def setup(self):
+        """
+        Performs necessary setup things
+        """
+        Flickrbox.auth()
         if not os.path.exists(self.path):
             os.makedirs(self.path)
         logging.info("Logging in...")
         self._user = flickr.test.login()
 
+    def sync(self, sync):
+        """
+        Syncs down from remote Flickr library, then back up
+        """
         if not sync:
             return
 

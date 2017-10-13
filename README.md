@@ -17,14 +17,12 @@ Flickr provides 1TB of storage FOR FREE - perfect! But, there is no tool for Fli
 
 1. Download the project (from here for now)
 
-2. Get your API keys and get authorized by following [this guide](https://github.com/alexis-mignon/python-flickr-api/wiki/Flickr-API-Keys-and-Authentication) and add them to `flickr_keys.py` like:
+2. Get your API keys (see [this guide](https://github.com/alexis-mignon/python-flickr-api/wiki/Flickr-API-Keys-and-Authentication)) and add them to `flickr_keys.py` like:
 
 ```python
 API_KEY = "aypeeeyekey"
 API_SECRET = "seakret"
 ```
-
-(From the guide) save auth details to a file named `.auth`
 
 3. Install the things.
 
@@ -35,7 +33,7 @@ python3 -m venv venv && source venv/bin/activate && pip install -r requirements.
 4. Fire it up
 
 ```bash
-python3 main.py
+python3 flickrbox.py
 ```
 
 ### Usage
