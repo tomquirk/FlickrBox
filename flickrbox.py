@@ -26,7 +26,7 @@ class Flickrbox:
 
     def __init__(self, dirname="FlickrBox", path=Path.home(), sync=False):
         self.dirname = dirname
-        self.path = "%s/%s" % (path, dirname)
+        self.path = os.path.join(path, dirname)
 
         self._upload_tickets = {}
         self._user = None
@@ -260,7 +260,7 @@ class Flickrbox:
         """
         Returns the absolute path based on given arguments
         """
-        return "%s/%s/%s%s" % (self.path, photoset_title, photo_title, file_ext)
+        return os.path.join(self.path, photoset_title, "%s%s" % (photo_title, file_ext))
 
 
 class FlickrboxEventHandler(watchdog.events.FileSystemEventHandler):
