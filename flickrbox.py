@@ -304,7 +304,7 @@ class FlickrboxEventHandler(watchdog.events.FileSystemEventHandler):
         """
         Returns a dictionary containing the photoset title and photo title of a given filepath
         """
-        parsed = file_path.split('/')
+        parsed = file_path.split(os.sep)
         photo_parsed = os.path.splitext(parsed[-1])
         return {
             "photoset": parsed[-2],
